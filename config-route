@@ -1,0 +1,57 @@
+大多时候，我们配置主机都会使用到双网卡，一个用于外网，一个用于内网。
+
+但是，当我们两个网卡都使用得时候，发现Ubuntu的默认路由会有两个，导致数据不通。
+
+比如主机拥有2个网卡ens33和ens34，其中ens33用于外网，ens34用于内网。使用route -n指令查看有2个默认路由。
+
+kwan@ubuntu:~$ route -n
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+0.0.0.0         192.168.192.1   0.0.0.0         UG    0      0        0 ens34
+0.0.0.0         192.168.1.1     0.0.0.0         UG    100    0        0 ens33
+192.168.1.0     0.0.0.0         255.255.255.0   U     0      0        0 ens33
+192.168.1.1     0.0.0.0         255.255.255.255 UH    100    0        0 ens33
+192.168.192.0   0.0.0.0         255.255.255.0   U     0      0        0 ens34
+这个时候需要修改 sudo vim /etc/netplan/50-cloud-init.yaml   （建议修改配置文件之前，都备份一个）
+
+注释掉静态IP 的gateway4。
+
+最终配置如下：
+
+# To disable cloud-init's network configuration capabilities, write a file
+# /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg with the following:
+# network: {config: disabled}
+network:
+    version: 2
+    ethernets:
+        ens33:
+            dhcp4: true
+            nameservers:
+                    addresses: [192.168.1.1, 223.5.5.5]
+        ens34:
+            dhcp4: false
+            addresses:
+             - 192.168.192.135/24
+            routes:
+             - to: 192.168.192.0/24
+               via: 192.168.192.1
+               table: 101
+            routing-policy:
+             - from: 192.168.192.0/24
+               table: 101
+
+            #gateway4: 192.168.192.1
+编辑完成后使用 sudo netplan apply 应用新配置。
+
+重新查看路由信息， 发现只有一个默认路由：
+
+kwan@ubuntu:~$ route -n
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+0.0.0.0         192.168.1.1     0.0.0.0         UG    100    0        0 ens33
+192.168.1.0     0.0.0.0         255.255.255.0   U     0      0        0 ens33
+192.168.1.1     0.0.0.0         255.255.255.255 UH    100    0        0 ens33
+192.168.192.0   0.0.0.0         255.255.255.0   U     0      0        0 ens34
+
+## References
+https://my.oschina.net/u/4173440/blog/3109177/print
